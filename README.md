@@ -12,6 +12,12 @@ A skeleton for an F-Droid repo setup using a YubiHSM 2 for signing
 2. Run `./scripts/sign.sh` to sign the repo
 3. Upload the `repo/` folder to your F-Droid webserver
 
+## Adding app updates
+
+Just drop the new APK files into the `repo/` folder and run `./scripts/sign.sh` again.
+Due to bugs in fdroidserver, you may need to give the new APK file a different name than the old one.
+Old APKs from the same app could be removed from the `repo/` folder, but it is not required.
+
 ## Adding a new app
 
 When adding a new app to the `repo/` folder, you will see a warning such as:
