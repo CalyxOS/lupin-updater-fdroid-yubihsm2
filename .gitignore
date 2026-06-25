@@ -1,0 +1,6 @@
+.idea
+tmp
+srclibs
+repo/*.apk
+repo/*.jar
+repo/*.json
