@@ -44,11 +44,12 @@ if _missing:
     sys.exit(1)
 
 # Safe to import now
+import cryptography.x509
 import yubihsm
 import yubihsm.exceptions
 from yubihsm import YubiHsm
-from yubihsm.defs import OBJECT
-from yubihsm.objects import WrapKey
+from yubihsm.defs import CAPABILITY, OBJECT
+from yubihsm.objects import Opaque, WrapKey
 import yaml
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -221,48 +222,62 @@ def ensure_key_on_hsm(session, repo_key_id: int, key_dir: Path) -> None:
     slot first if the HSM is full.
     """
     repo_key_alias = f"0x{repo_key_id:04x}"
-    if key_exists_on_hsm(session, repo_key_id):
+    keys = session.list_objects(object_type=OBJECT.ASYMMETRIC_KEY)
+    if key_exists_on_hsm(keys, repo_key_id):
         print(f"Signing key {repo_key_alias} is present on the HSM.")
         return
 
     print(f"Signing key {repo_key_alias} not found on HSM. Attempting import...")
 
-    # Key backup files follow the naming convention: 0x1100-asymmetric-key.yhw
-    filename = f"{repo_key_alias}-asymmetric-key.yhw"
-    matches = list(key_dir.glob(filename))
-    if not matches:
-        sys.exit(
-            f"ERROR: No wrapped key file found matching: {key_dir / filename}\n"
-            "Ensure $CALYX_OTA_TOOLS_DIR/keys contains the correct backup file."
-        )
-    key_file = matches[0]
-    print(f"  Found wrapped key file: {key_file}")
-
     # Attempt the import; if the HSM is full, evict a key first and retry.
     while True:
         try:
-            import_wrapped_key(session, key_file)
+            import_wrapped_key(session, key_dir, repo_key_alias)
             print(f"  Successfully imported signing key 0x{repo_key_id:04x}.")
             break
         except yubihsm.exceptions.YubiHsmDeviceError as e:
-            print(f"  HSM returned error: {e} — attempting to free a slot...")
-            evict_id = pick_key_to_evict(session)
-            if evict_id is None:
-                sys.exit("ERROR: HSM is full but no keys found to evict. Cannot continue.")
-            print(
-                f"  WARNING: About to delete key 0x{evict_id:04x} from the HSM to free space.\n"
-                "  Press Ctrl-C now to abort if this is not what you want."
-            )
-            input("  Press Enter to confirm deletion and continue...")
-            delete_key(session, evict_id)
+            if e.code == 0x07:  # STORAGE_FAILED
+                print(f"  HSM returned error: {e} — attempting to free a slot...")
+                keys = evict_key(session, keys)
+            else:
+                raise
+
+    while True:
+        try:
+            import_attestation_cert(session, key_dir, repo_key_id)
+            print(f"  Successfully imported key certificate 0x{repo_key_id:04x}.")
+            break
+        except yubihsm.exceptions.YubiHsmDeviceError as e:
+            if e.code == 0x07:  # STORAGE_FAILED
+                print(f"  HSM returned error: {e} — attempting to free a slot...")
+                keys = evict_key(session, keys)
+            else:
+                raise
 
 
-def key_exists_on_hsm(session, key_id: int) -> bool:
+def key_exists_on_hsm(keys, key_id: int) -> bool:
     """Return True if an asymmetric key with the given ID is present on the HSM."""
-    return any(k.id == key_id for k in list_asymmetric_keys(session))
+    return any(k.id == key_id for k in keys)
 
 
-def pick_key_to_evict(session) -> int | None:
+def evict_key(session, keys) -> list:
+    evict_id = pick_key_to_evict(keys)
+    if evict_id is None:
+        sys.exit("ERROR: HSM is full but no keys found to evict. Cannot continue.")
+    print(
+        "\n"
+        f"  WARNING: About to delete key 0x{evict_id:04x} from the HSM to free required space.\n"
+        "  Press Ctrl-C now to abort if this is not what you want."
+    )
+    input("  Press Enter to confirm deletion and continue...")
+
+    session.get_object(evict_id, OBJECT.ASYMMETRIC_KEY).delete()
+    session.get_object(evict_id, OBJECT.OPAQUE).delete()
+    print(f"  Deleted key 0x{evict_id:04x} from HSM.")
+    return [k for k in keys if k.id != evict_id]
+
+
+def pick_key_to_evict(keys) -> int | None:
     """
     Choose a key to remove to free up a slot.
 
@@ -270,7 +285,6 @@ def pick_key_to_evict(session) -> int | None:
       1. Keys in the 0x2xxx or 0x3xxx range (utility / non-signing objects).
       2. Any other asymmetric key as a last resort.
     """
-    keys = list_asymmetric_keys(session)
     if not keys:
         return None
 
@@ -281,20 +295,53 @@ def pick_key_to_evict(session) -> int | None:
     return keys[0].id  # last resort
 
 
-def list_asymmetric_keys(session) -> list:
-    """Return all asymmetric key objects currently on the HSM."""
-    return session.list_objects(object_type=OBJECT.ASYMMETRIC_KEY)
-
-
-def delete_key(session, key_id: int) -> None:
-    session.get_object(key_id, OBJECT.ASYMMETRIC_KEY).delete()
-    print(f"  Deleted key 0x{key_id:04x} from HSM.")
-
-
-def import_wrapped_key(session, key_file: Path) -> None:
+def import_wrapped_key(session, key_dir, repo_key_alias) -> None:
     """Decode a base64-encoded .yhw file and import it into the HSM."""
+    # Wrapped key files follow the naming convention: 0x1100-asymmetric-key.yhw
+    filename = f"{repo_key_alias}-asymmetric-key.yhw"
+    matches = list(key_dir.glob(filename))
+    if not matches:
+        sys.exit(
+            f"ERROR: No wrapped key file found matching: {key_dir / filename}\n"
+            "Ensure $CALYX_OTA_TOOLS_DIR/keys contains the correct backup file."
+        )
+    key_file = matches[0]
+    print(f"  Found wrapped key file: {key_file}")
+
     wrapped_key_bytes = base64.b64decode(key_file.read_text())
     WrapKey(session, WRAP_KEY_ID).import_wrapped(wrapped_key_bytes)
+
+
+def import_attestation_cert(session, key_dir, key_id: int) -> None:
+    """Import a PEM attestation certificate as an Opaque object on the HSM."""
+    # Locate attestation certificate, e.g. 0x1600.attestation.pem
+    cert_file_name = f"0x{key_id:04x}.attestation.pem"
+    cert_matches = list(key_dir.glob(cert_file_name))
+    if not cert_matches:
+        sys.exit(
+            f"ERROR: No attestation certificate found matching: {key_dir / cert_file_name}\n"
+            "Ensure $CALYX_OTA_TOOLS_DIR/keys contains the correct backup file."
+        )
+    cert_file = cert_matches[0]
+    print(f"  Found attestation certificate: {cert_file}")
+
+    pem = cryptography.x509.load_pem_x509_certificate(cert_file.read_bytes())
+    try:
+        Opaque.put_certificate(
+            session=session,
+            object_id=key_id,
+            label="",
+            domains=0b1100,  # 3 and 4
+            capabilities=CAPABILITY.NONE,
+            certificate=pem,
+            compress=True,
+        )
+        print(f"  Successfully imported attestation certificate for 0x{key_id:04x}.")
+    except yubihsm.exceptions.YubiHsmDeviceError as e:
+        if e.code == 0x11:  # OBJECT_EXISTS
+            print("  Attestation certificate already present, skipping.")
+        else:
+            raise
 
 
 # ---------------------------------------------------------------------------
