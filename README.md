@@ -2,7 +2,7 @@ A skeleton for an F-Droid repo setup using a YubiHSM 2 for signing
 
 ## Requirements
 
-    sudo apt install fdroidserver python3-yaml python3-cryptography
+    sudo apt install fdroidserver python3-yaml python3-cryptography apksigner
     sudo apt install python3-yubihsm yubihsm-pkcs11 python3-usb
     sudo apt install yubihsm-shell yubihsm-connector opensc
 

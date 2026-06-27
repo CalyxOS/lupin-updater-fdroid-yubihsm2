@@ -139,6 +139,12 @@ def check_fdroid_installed() -> None:
             "ERROR: 'fdroid' executable not found in PATH.\n"
             "Install it with:  sudo apt install fdroidserver"
         )
+    result = subprocess.run([SCRIPT_DIR / "apksigner.sh", "--help"], stdout=subprocess.DEVNULL)
+    if result.returncode != 0:
+        sys.exit(
+            "ERROR: 'apksigner' executable not found.\n"
+            "Install it with:  sudo apt install apksigner"
+        )
 
 
 # ---------------------------------------------------------------------------
