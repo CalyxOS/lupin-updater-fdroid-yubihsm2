@@ -94,6 +94,7 @@ def main() -> None:
 
     # 5. Run fdroid update
     print("\nRunning: fdroid update ...")
+    # -c or --rename-apks can't be added her edu to a bug with the icon.png
     subprocess.run(["fdroid", "update"], env=os.environ, check=True, text=True, cwd=SCRIPT_DIR)
 
     # 6. Save HSM audit log

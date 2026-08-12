@@ -24,4 +24,4 @@ When adding a new app to the `repo/` folder, you will see a warning such as:
 
     WARNING: com.example.apk (com.example) has no metadata!
 
-You can either run `fdroid update -c` or manually generate the metadata file in `repo/metadata/com.example.yml`.
+To fix this, you need manually generate the metadata file in `repo/metadata/com.example.yml`.
