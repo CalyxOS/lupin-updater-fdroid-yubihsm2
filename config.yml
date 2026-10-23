@@ -50,7 +50,9 @@
 
 # Canonical URL of the repositoy, needs to end in /repo. Is is used to identity
 # the repo in the client, as well.
-repo_url: https://fdroid.calyxos.org/updater/repo
+#repo_url: https://fdroid.calyxos.org/updater/repo
+repo_url: https://laskija.eu.calyxos.net/updater/repo
+
 #
 # Base URL for per-package pages on the website of this repo,
 # i.e. https://f-droid.org/packages/<appid>/ This should be accessible
@@ -59,7 +61,7 @@ repo_url: https://fdroid.calyxos.org/updater/repo
 # repo_web_base_url: https://MyFirstFDroidRepo.org/packages/
 #
 repo_name: CalyxOS Updater
-repo_description: Used by CalyxOS updater app to update app out of band.
+repo_description: Used by CalyxOS updater app to update apps out of band.
 
 # As above, but for the archive repo.
 #
