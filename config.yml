@@ -59,7 +59,7 @@ repo_url: https://fdroid.calyxos.org/updater/repo
 # repo_web_base_url: https://MyFirstFDroidRepo.org/packages/
 #
 repo_name: CalyxOS Updater
-repo_description: Used by CalyxOS updater app to update app out of band.
+repo_description: Used by CalyxOS updater app to update apps out of band.
 
 # As above, but for the archive repo.
 #
