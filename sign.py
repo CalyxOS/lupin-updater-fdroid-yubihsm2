@@ -54,11 +54,13 @@ import yaml
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 CONFIG_FILE = SCRIPT_DIR / "config.yml"
+PATCH_FILE = SCRIPT_DIR / "0001-update-Spoof-signature-to-Google-s-for-microG.patch"
 PKCS11_CFG = SCRIPT_DIR / "pkcs11_yubihsm2.cfg"
 
 WRAP_KEY_ID = 0x0010
 
 AUDIT_SCRIPT_REL = Path("vendor/calyx/scripts/pkcs11/vendor.yubihsm.audit.logs.py")
+FDROIDSERVER_ROOT = "/usr/lib/python3/dist-packages"
 
 
 def main() -> None:
@@ -146,6 +148,22 @@ def check_fdroid_installed() -> None:
             "ERROR: 'apksigner' executable not found.\n"
             "Install it with:  sudo apt install apksigner"
         )
+
+
+def patch_fdroid_if_needed() -> None:
+    if patch_check("--check", "--reverse"):
+        print("MicroG Signature Spoof already patched.")
+    elif patch_check("--check"):
+        subprocess.run(["sudo", "git", "apply", "-p1", PATCH_FILE], cwd=FDROIDSERVER_ROOT, check=True)
+        print("MicroG Signature Spoof patched.")
+    else:
+        sys.exit("MicroG Signature Spoof patch does not apply cleanly.")
+
+
+def patch_check(*flags) -> None:
+    return subprocess.run(
+        ["git", "apply", "-p1"] + list(flags) + [PATCH_FILE], cwd=FDROIDSERVER_ROOT,
+        capture_output=True).returncode == 0
 
 
 # ---------------------------------------------------------------------------
